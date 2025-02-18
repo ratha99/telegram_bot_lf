@@ -31,15 +31,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Send a message with the inline keyboard
     await update.message.reply_text("Hello! Click the button below to get the latest report.", reply_markup=reply_markup)
 
+# Command handler for /get_post_report
+async def get_post_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await button_callback(Update(callback_query=Update.callback_query(update.message.from_user.id, "get_report_post")), context)
+
+# Command handler for /get_user_report
+async def get_user_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await button_callback(Update(callback_query=Update.callback_query(update.message.from_user.id, "get_report_user")), context)
+
 # Callback handler for the inline buttons
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+    query = update.callback_query or Update.callback_query(update.message.from_user.id, "unknown")
     await query.answer()  # Acknowledge the button press
 
     if query.data == "get_report_post":
         # Fetch data from the API for posts
         try:
-            response = requests.get(API_URL+"/report")
+            response = requests.get(f"{API_URL}/report/post")
             if response.status_code == 200:
                 data = response.json()
                 # Format the response to send to the user
@@ -61,14 +69,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         message += f"\n**Total Posts:** {item['totalPosts']}\n"
                 await query.edit_message_text(text=message, parse_mode="Markdown")
             else:
-                await query.edit_message_text(text="Failed to fetch report. Please try again later.")
+                logging.error(f"API request failed with status code {response.status_code}: {response.text}")
+                await query.edit_message_text(text="Failed to fetch post report. Please try again later.")
         except Exception as e:
-            logging.error(f"Error fetching report: {e}")
-            await query.edit_message_text(text="An error occurred while fetching the report.")
+            logging.error(f"Error fetching post report: {e}")
+            await query.edit_message_text(text="An error occurred while fetching the post report.")
 
     elif query.data == "get_report_user":
-        # Fetch data from the API for users (you can customize this part)
-        await query.edit_message_text(text="User report functionality is not implemented yet.")
+        # Fetch data from the API for users
+        try:
+            response = requests.get(f"{API_URL}/report/user")
+            if response.status_code == 200:
+                data = response.json()
+                # Format the response to send to the user
+                message = "📊 **User Report**\n\n"
+                if "totalUsers" in data:
+                    message += f"**Total Users:** {data['totalUsers']}\n"
+                if "usersByRole" in data:
+                    message += "\n**By Role:**\n"
+                    for role in data["usersByRole"]:
+                        message += f"- {role['role']}: {role['count']}\n"
+                if "usersByStatus" in data:
+                    message += "\n**By Status:**\n"
+                    for status in data["usersByStatus"]:
+                        message += f"- {status['status']}: {status['count']}\n"
+                await query.edit_message_text(text=message, parse_mode="Markdown")
+            else:
+                logging.error(f"API request failed with status code {response.status_code}: {response.text}")
+                await query.edit_message_text(text="Failed to fetch user report. Please try again later.")
+        except Exception as e:
+            logging.error(f"Error fetching user report: {e}")
+            await query.edit_message_text(text="An error occurred while fetching the user report.")
 
 # Main function to start the bot
 def main():
@@ -77,6 +108,8 @@ def main():
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("get_post_report", get_post_report))
+    application.add_handler(CommandHandler("get_user_report", get_user_report))
 
     # Add callback handler for inline buttons
     application.add_handler(CallbackQueryHandler(button_callback))
